@@ -1,0 +1,206 @@
+buildscript {
+	ext {
+		queryDslVersion = "5.0.0"
+	}
+}
+
+plugins {
+	id 'org.springframework.boot' version '2.7.1'
+	id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+	id 'java'
+	// rest-docs
+	id 'org.asciidoctor.jvm.convert' version "3.3.2"
+	// querydsl
+	id "com.ewerk.gradle.plugins.querydsl" version "1.0.10"
+	//sonarqube
+	id "org.sonarqube" version "3.0"
+	id 'jacoco'
+}
+
+group = 'com.qanda'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '11'
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+	// rest-docs
+	asciidoctorExtensions
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.projectlombok:lombok:1.18.22'
+
+
+	// rest-docs
+	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.8.1'
+	asciidoctorExtensions 'org.springframework.restdocs:spring-restdocs-asciidoctor'
+
+	// jpa
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+	// querydsl
+	implementation "com.querydsl:querydsl-jpa:${queryDslVersion}"
+	implementation "com.querydsl:querydsl-apt:${queryDslVersion}"
+
+	// spring-boot
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	//retry
+	implementation 'org.springframework.retry:spring-retry'
+	implementation 'org.springframework:spring-aspects'
+
+//	// aws s3
+//	implementation platform('software.amazon.awssdk:bom:2.17.276')
+//	implementation group: 'com.amazonaws', name: 'aws-java-sdk-s3', version: '1.12.319'
+//
+//	// tika
+//	implementation group: 'org.apache.tika', name: 'tika-core', version: '2.4.1'
+//
+//	// testcontainers
+//	testImplementation "org.testcontainers:junit-jupiter:1.17.3"
+//	testImplementation group: 'org.testcontainers', name: 'localstack', version: '1.17.3'
+//	implementation group: 'commons-io', name: 'commons-io', version: '2.11.0'
+//
+//	// jwt
+//	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+//	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+//	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+	// DB
+	runtimeOnly 'com.h2database:h2'
+	runtimeOnly 'mysql:mysql-connector-java'
+
+//	// sonarqube
+//	implementation 'org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:3.3'
+//
+//	// lombok
+//	annotationProcessor 'org.projectlombok:lombok'
+//	compileOnly 'org.projectlombok:lombok'
+//
+//	// test
+//	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+//	testImplementation 'io.rest-assured:rest-assured:4.4.0'
+//
+//	// log
+//	implementation 'net.rakugakibox.spring.boot:logback-access-spring-boot-starter:2.7.1'
+//
+//	// flyway
+//	implementation 'org.flywaydb:flyway-core:8.2.2'
+//	implementation 'org.flywaydb:flyway-mysql'
+//
+//	//actuator
+//	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+//	implementation 'io.micrometer:micrometer-registry-prometheus'
+//
+//	// redis
+//	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// ============= rest-docs =============
+ext {
+	snippetsDir = file('build/generated-snippets')
+}
+
+test {
+	outputs.dir snippetsDir
+	useJUnitPlatform()
+	finalizedBy 'jacocoTestReport'
+}
+
+asciidoctor {
+	configurations 'asciidoctorExtensions'
+	inputs.dir snippetsDir
+	dependsOn test
+}
+
+task copyDocument(type: Copy) {
+	dependsOn asciidoctor
+	from file("${asciidoctor.outputDir}")
+	into file("build/resources/main/static/docs")
+}
+
+bootJar {
+	dependsOn copyDocument
+}
+
+jar {
+	dependsOn bootJar
+}
+
+bootJarMainClassName {
+	dependsOn copyDocument
+}
+
+// ============= querydsl =============
+def querydslDir = "$buildDir/generated/querydsl"
+
+querydsl {
+	jpa = true
+	querydslSourcesDir = querydslDir
+}
+
+sourceSets {
+	main.java.srcDir querydslDir
+}
+
+compileQuerydsl {
+	options.annotationProcessorPath = configurations.querydsl
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+	querydsl.extendsFrom compileClasspath
+}
+
+// =========sonarqube=============
+jacoco {
+	toolVersion = "0.8.7"
+}
+
+jacocoTestReport {
+	dependsOn copyDocument
+	reports {
+		xml.enabled true
+		csv.enabled false
+		html.enabled false
+	}
+}
+//sonarqube {
+//	properties {
+//		property "sonar.projectKey", "gongseek"
+//		property "sonar.projectName", "gongseek"
+//		property "sonar.sources", "src" // 소스 경로
+//		property "sonar.language", "java" // 언어
+//		property "sonar.sourceEncoding", "UTF-8"
+//		property "sonar.profile", "Sonar way" // SonarQube 에서 분석할 때 적용할 프로필(분석할 수준 설정)
+//		property "sonar.java.binaries", "${buildDir}/classes" // 자바 클래스 파일위치
+//		property "sonar.test.inclusions", "**/*Test.java" // 코드 분석에 사용할 테스트 소스
+//		property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
+//		// jacoco 플러그인의 결과 파일
+//	}
+//}
+
+processResources.dependsOn('copySecret')
+
+task copySecret(type: Copy) {
+	from 'src/main/resources/secret/application-prod.yml'
+	into 'src/main/resources'
+
+	from 'src/main/resources/secret/application-dev.yml'
+	into 'src/main/resources'
+}
+
